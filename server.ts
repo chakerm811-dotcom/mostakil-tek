@@ -632,7 +632,7 @@ app.post("/api/meetings", async (req, res) => {
 // 7. Update meeting (add notes, reschedule, change status)
 app.patch("/api/meetings/:id", async (req, res) => {
   try {
-    const { status, notes, meetingDate, meetingTime } = req.body;
+    const { status, notes, meetingDate, meetingTime, finalPrice } = req.body;
     const coll = await dbAdapter.collection("meetings");
     
     const existing = await coll.findOne({ id: req.params.id });
@@ -645,6 +645,7 @@ app.patch("/api/meetings/:id", async (req, res) => {
     if (notes !== undefined) updateFields.notes = notes;
     if (meetingDate !== undefined) updateFields.meetingDate = meetingDate;
     if (meetingTime !== undefined) updateFields.meetingTime = meetingTime;
+    if (finalPrice !== undefined) updateFields.finalPrice = finalPrice !== "" ? Number(finalPrice) : null;
 
     await coll.updateOne({ id: req.params.id }, { $set: updateFields });
     const updated = await coll.findOne({ id: req.params.id });

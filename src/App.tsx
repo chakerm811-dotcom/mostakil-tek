@@ -34,7 +34,9 @@ import {
   ChevronRight, 
   Trash2, 
   TrendingUp, 
-  BookOpen 
+  BookOpen,
+  Printer,
+  Download
 } from "lucide-react";
 
 interface Service {
@@ -71,6 +73,7 @@ interface Meeting {
   notes: string;
   createdAt: string;
   aiConsultation?: AIConsultation;
+  finalPrice?: number | null;
 }
 
 interface DiagnoseReport {
@@ -129,7 +132,9 @@ export default function App() {
   const [selectedMeetingForNotes, setSelectedMeetingForNotes] = useState<Meeting | null>(null);
   const [tempNotes, setTempNotes] = useState("");
   const [tempStatus, setTempStatus] = useState<string>("");
+  const [tempPrice, setTempPrice] = useState<string>("");
   const [isUpdatingMeeting, setIsUpdatingMeeting] = useState(false);
+  const [invoiceMeeting, setInvoiceMeeting] = useState<Meeting | null>(null);
 
   // AI Direct Diagnoser State
   const [troubleInput, setTroubleInput] = useState("");
@@ -239,6 +244,7 @@ export default function App() {
 
   // Init Data fetch
   useEffect(() => {
+    document.title = "مستقل تك - حجز خدمات واستشارات المطور";
     fetchBackendStatus();
     fetchDeveloperProfile();
     fetchServices();
@@ -424,6 +430,7 @@ export default function App() {
     setSelectedMeetingForNotes(meeting);
     setTempNotes(meeting.notes || "");
     setTempStatus(meeting.status);
+    setTempPrice(meeting.finalPrice !== undefined && meeting.finalPrice !== null ? String(meeting.finalPrice) : "");
   };
 
   const handleUpdateMeetingStatus = async () => {
@@ -436,7 +443,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: tempStatus,
-          notes: tempNotes
+          notes: tempNotes,
+          finalPrice: tempPrice
         })
       });
 
@@ -448,11 +456,11 @@ export default function App() {
           setSearchedMeetings(searchedMeetings.map(m => m.id === updated.id ? updated : m));
         }
         setSelectedMeetingForNotes(updated);
-        alert("تم تحديث حالة وحالة موعد الاجتماع بنجاح!");
+        alert("تم حفظ التعديلات وتحديث حالة وسعر الخدمة بنجاح! ✅");
       }
     } catch (err) {
       console.error(err);
-      alert("أخفق تحديث بيانات الاجتماع سحابياً.");
+      alert("أخفق تحديث بيانات الاجتماع أو سعر الخدمة.");
     } finally {
       setIsUpdatingMeeting(false);
     }
@@ -564,12 +572,14 @@ export default function App() {
             </div>
           </div>
 
-          {/* Database Indicator */}
-          <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
-            <Database className="h-3.5 w-3.5 text-emerald-600" />
-            <span>{dbStatus?.databaseType || "خادم MongoDB متصل"}</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          </div>
+          {/* Database Indicator (Only visible in Admin Mode for Developer checking) */}
+          {adminMode && (
+            <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 rounded-full text-xs font-semibold text-slate-600">
+              <Database className="h-3.5 w-3.5 text-emerald-600" />
+              <span>{dbStatus?.databaseType || "خادم MongoDB متصل"}</span>
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </div>
+          )}
 
           {/* Admin Switch Simulation Link */}
           <div className="flex items-center gap-3">
@@ -1393,13 +1403,13 @@ export default function App() {
 
                       {adminMode ? (
                         <div className="space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] font-black mb-1">تعديل حالة الموعد</label>
                               <select
                                 value={tempStatus}
                                 onChange={(e) => setTempStatus(e.target.value)}
-                                className="w-full p-2 border rounded-lg text-xs focus:ring-1 focus:ring-amber-500"
+                                className="w-full p-2 border rounded-lg text-xs font-semibold focus:ring-1 focus:ring-amber-500 bg-white"
                               >
                                 <option value="pending">قيد الانتظار لمقابلة حسام ⏳</option>
                                 <option value="scheduled">تأكيد الموعد وإضافة رابط اللقاء 📅</option>
@@ -1407,14 +1417,37 @@ export default function App() {
                                 <option value="canceled">إلغاء الموعد بناء على الرغبة ❌</option>
                               </select>
                             </div>
-                            <div className="text-right flex items-end justify-end">
+
+                            <div>
+                              <label className="block text-[10px] font-black mb-1">سعر الخدمة النهائي ($)</label>
+                              <input
+                                type="number"
+                                placeholder={selectedMeetingForNotes.aiConsultation?.estimatedCost?.replace(/[^0-9]/g, "") || "150"}
+                                value={tempPrice}
+                                onChange={(e) => setTempPrice(e.target.value)}
+                                className="w-full p-1.5 border rounded-lg text-xs font-mono text-right font-bold focus:ring-1 focus:ring-amber-500 bg-white"
+                              />
+                            </div>
+
+                            <div className="text-right flex items-end justify-end gap-2">
                               <button
                                 onClick={handleUpdateMeetingStatus}
                                 disabled={isUpdatingMeeting}
-                                className="bg-amber-600 text-white font-extrabold text-xs px-5 h-9 rounded-lg hover:bg-amber-700 transition"
+                                className="w-full bg-amber-600 text-white font-extrabold text-xs h-9.5 rounded-lg hover:bg-amber-700 transition flex items-center justify-center gap-1 cursor-pointer"
                               >
-                                {isUpdatingMeeting ? "جاري التحديث..." : "حفظ التغييرات في الموعد ✔"}
+                                {isUpdatingMeeting ? "جاري الحفظ..." : "حفظ التغييرات ✔"}
                               </button>
+
+                              {(tempStatus === "completed" || selectedMeetingForNotes.status === "completed") && (
+                                <button
+                                  type="button"
+                                  onClick={() => setInvoiceMeeting(selectedMeetingForNotes)}
+                                  className="h-9.5 bg-amber-500 font-extrabold text-white text-xs px-3 rounded-lg hover:bg-amber-600 transition flex items-center gap-1"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                  <span>الفاتورة 📄</span>
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -1430,11 +1463,34 @@ export default function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-xs leading-relaxed text-slate-700 bg-white p-4 rounded-lg border border-slate-100">
-                          {selectedMeetingForNotes.notes ? (
-                            <p className="font-semibold text-slate-800">{selectedMeetingForNotes.notes}</p>
-                          ) : (
-                            <p className="text-slate-400 italic">في انتظار مراجعة المطور وتأكيد الموعد النهائي وإدراج ملاحظات اللقاء.</p>
+                        <div className="space-y-4">
+                          <div className="text-xs leading-relaxed text-slate-700 bg-white p-4 rounded-lg border border-slate-100">
+                            {selectedMeetingForNotes.notes ? (
+                              <p className="font-semibold text-slate-800">{selectedMeetingForNotes.notes}</p>
+                            ) : (
+                              <p className="text-slate-400 italic">في انتظار مراجعة المطور وتأكيد الموعد النهائي وإدراج ملاحظات اللقاء.</p>
+                            )}
+                          </div>
+
+                          {/* Beautiful Client Invoice Section */}
+                          {(selectedMeetingForNotes.status === "completed" || selectedMeetingForNotes.finalPrice) && (
+                            <div className="bg-amber-50/70 border border-amber-200/50 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                              <div className="text-right">
+                                <span className="text-[10px] text-amber-800 font-extrabold block">قيمة العمل وسعر الخدمة النهائي</span>
+                                <span className="text-xs font-black text-slate-900 mt-1 block">
+                                  ${selectedMeetingForNotes.finalPrice || 150} دولار أمريكي
+                                </span>
+                                <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">الحالة: فاتورة مدفوعة بالكامل ومصادق عليها ✅</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setInvoiceMeeting(selectedMeetingForNotes)}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-4.5 py-2 rounded-lg text-xs transition flex items-center gap-1.5 shadow-xs"
+                              >
+                                <FileText className="h-4 w-4" />
+                                <span>عرض وتحميل الفاتورة الرسمية PDF 📄</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -1983,50 +2039,76 @@ export default function App() {
                         )}
 
                         {/* Editor inputs */}
-                        <div className="space-y-3 pt-2 border-t text-xxs block text-right">
-                          <div>
-                            <label className="block font-bold text-slate-700 mb-1">حالة الطلب</label>
-                            <select
-                              value={tempStatus}
-                              onChange={(e) => setTempStatus(e.target.value)}
-                              className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
-                            >
-                              <option value="pending">انتظار القبول والمراجعة ⏳</option>
-                              <option value="scheduled">تأكيد الجدولة وتقديم الدعم مسبقاً 📅</option>
-                              <option value="completed">تم عقد اللقاء وحل العطل ✅</option>
-                              <option value="canceled">إلغاء الموعد المقترح ❌</option>
-                            </select>
+                        <div className="space-y-4 pt-2 border-t text-xxs block text-right">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">حالة الطلب</label>
+                              <select
+                                value={tempStatus}
+                                onChange={(e) => setTempStatus(e.target.value)}
+                                className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50 text-[11px] font-semibold"
+                              >
+                                <option value="pending">انتظار القبول والمراجعة ⏳</option>
+                                <option value="scheduled">تأكيد الجدولة وتقديم الدعم مسبقاً 📅</option>
+                                <option value="completed">تم عقد اللقاء وحل العطل ✅</option>
+                                <option value="canceled">إلغاء الموعد المقترح ❌</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block font-bold text-slate-700 mb-1 text-[11px]">سعر الخدمة النهائي ($)</label>
+                              <input
+                                type="number"
+                                placeholder={selectedMeetingForNotes.aiConsultation?.estimatedCost?.replace(/[^0-9]/g, "") || "150"}
+                                value={tempPrice}
+                                onChange={(e) => setTempPrice(e.target.value)}
+                                className="w-full p-2 border border-slate-200 rounded-lg text-right font-mono text-[11px] font-bold focus:ring-1 focus:ring-emerald-500 bg-slate-50"
+                              />
+                            </div>
                           </div>
 
                           <div>
-                            <label className="block font-bold text-slate-700 mb-1">رد وتوجيهات المبرمج (تظهر للعميل في قائمة مواعيده)</label>
+                            <label className="block font-bold text-slate-700 mb-1 text-[11px]">رد وتوجيهات المبرمج (تظهر للعميل في قائمة مواعيده)</label>
                             <textarea
                               rows={3}
                               placeholder="أكتب توجيهاتك ونصائح للعميل، مثل: أهلاً بك، تم قبول حجزك ويرجى تنزيل البرنامج..."
                               value={tempNotes}
                               onChange={(e) => setTempNotes(e.target.value)}
-                              className="w-full p-2 border border-slate-200 rounded-lg text-right"
+                              className="w-full p-2 border border-slate-200 rounded-lg text-right text-[11px] font-medium"
                             ></textarea>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={handleUpdateMeetingStatus}
-                            disabled={isUpdatingMeeting}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
-                          >
-                            {isUpdatingMeeting ? (
-                              <>
-                                <span className="animate-spin h-3 border-2 border-white border-t-transparent rounded-full"></span>
-                                <span>جاري الحفظ للتعديلات...</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-4 w-4" />
-                                <span>تحديث حالة و ملاحظات الموعد بنجاح ✅</span>
-                              </>
+                          <div className="flex flex-col sm:flex-row gap-2.5">
+                            <button
+                              type="button"
+                              onClick={handleUpdateMeetingStatus}
+                              disabled={isUpdatingMeeting}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+                            >
+                              {isUpdatingMeeting ? (
+                                <>
+                                  <span className="animate-spin h-3 border-2 border-white border-t-transparent rounded-full"></span>
+                                  <span>جاري حفظ التعديلات...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span>تحديث حالة وسعر الخدمة ✅</span>
+                                </>
+                              )}
+                            </button>
+
+                            {(tempStatus === "completed" || selectedMeetingForNotes.status === "completed") && (
+                              <button
+                                type="button"
+                                onClick={() => setInvoiceMeeting(selectedMeetingForNotes)}
+                                className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs text-xs animate-pulse"
+                              >
+                                <FileText className="h-4 w-4" />
+                                <span>توليد فاتورة PDF 📄</span>
+                              </button>
                             )}
-                          </button>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -2203,19 +2285,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* Secure Developer Hint / Tooltip for testing reference */}
-              <div className="p-3 bg-amber-50/60 border border-amber-100 text-amber-900 rounded-xl space-y-1">
-                <span className="font-bold flex items-center gap-1.5 text-xxs text-amber-800">
-                  <Info className="h-3.5 w-3.5" />
-                  بيانات تجربة الدخول السريع:
-                </span>
-                <p className="text-[10px] text-amber-900 font-medium">
-                  البريد: <span className="font-mono bg-white px-1 py-0.5 rounded font-bold border border-amber-200 font-sans">chakerm811@gmail.com</span>
-                </p>
-                <p className="text-[10px] text-amber-900 font-medium">
-                  كلمة المرور: <span className="font-mono bg-white px-1 py-0.5 rounded font-bold border border-amber-200 font-sans">chakerm811</span>
-                </p>
-              </div>
+
 
               <div className="flex gap-2 pt-1 font-sans">
                 <button
@@ -2234,6 +2304,177 @@ export default function App() {
                 </button>
               </div>
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Invoice Modal Block */}
+      {invoiceMeeting && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 overflow-hidden shadow-2xl space-y-4 text-right flex flex-col no-print my-8">
+            
+            {/* Modal Header controls (No print) */}
+            <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-6 py-4 no-print select-none">
+              <div className="flex items-center gap-2 text-slate-800">
+                <Printer className="h-5 w-5" />
+                <h4 className="font-extrabold text-slate-950 text-sm sm:text-base">توليد ومعاينة فاتورة العميل PDF</h4>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>طباعة وحفظ كـ PDF 🖨️</span>
+                </button>
+                <button 
+                  onClick={() => setInvoiceMeeting(null)}
+                  className="text-slate-500 hover:text-slate-900 bg-white hover:bg-slate-200 text-sm font-bold h-7 w-7 rounded-full flex items-center justify-center border transition"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Inner printable Invoice Container */}
+            <div className="p-6 md:p-8 space-y-6 text-right font-sans" id="printable-invoice-wrapper">
+              
+              {/* Header inside PRINT view */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-5 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="h-9 w-9 bg-slate-950 text-white rounded-xl flex items-center justify-center font-black text-sm">م</div>
+                    <span className="font-black text-lg text-slate-950">مستقل تك ✦ الدعم البرمجي</span>
+                  </div>
+                  <p className="text-xxs text-slate-500">منصة الاستشارات وحجز لقاءات معالجة الأعطال البرمجية للمطور م. حسام محمد</p>
+                </div>
+                
+                <div className="text-left sm:text-left self-stretch sm:self-auto border-t sm:border-0 pt-3 sm:pt-0">
+                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg px-3 py-1 text-xs font-black inline-block uppercase tracking-wider mb-2">
+                    ✓ فاتورة مدفوعة ومسددة
+                  </span>
+                  <p className="text-xs text-slate-700 font-bold">رقم الفاتورة: <span className="font-mono">INV-{invoiceMeeting.id.toUpperCase()}</span></p>
+                  <p className="text-xxs text-slate-500 mt-0.5">تاريخ الإصدار: {new Date(invoiceMeeting.meetingDate || Date.now()).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+              </div>
+
+              {/* Invoice Addresses Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xxs leading-relaxed text-slate-600 border-b pb-5">
+                <div className="space-y-1">
+                  <h5 className="font-black text-slate-950 text-xs border-r-2 border-slate-950 pr-2 mb-2">جهة تقديم الخدمة والدعم:</h5>
+                  <p><strong className="text-slate-900">المطور:</strong> المهندس محمد حسام (مطور Full-stack مستقل)</p>
+                  <p><strong className="text-slate-900">البريد المهني:</strong> hussein.tech@moustaqil.com</p>
+                  <p><strong className="text-slate-900">مقر العمل المهني:</strong> الرياض، المملكة العربية السعودية، قسم الدعم السحابي</p>
+                </div>
+
+                <div className="space-y-1">
+                  <h5 className="font-black text-slate-950 text-xs border-r-2 border-amber-500 pr-2 mb-2">بيانات العميل المستفيد:</h5>
+                  <p><strong className="text-slate-900">اسم العميل الكريم:</strong> {invoiceMeeting.clientName}</p>
+                  <p><strong className="text-slate-900">البريد الإلكتروني للاتصال:</strong> <span className="font-mono inline-block text-left">{invoiceMeeting.clientEmail}</span></p>
+                  <p><strong className="text-slate-900">الهاتف المسجل لدينا:</strong> {invoiceMeeting.clientPhone}</p>
+                  <p><strong className="text-slate-900">تاريخ اللقاء وحل الخلل:</strong> {invoiceMeeting.meetingDate} {invoiceMeeting.meetingTime}</p>
+                </div>
+              </div>
+
+              {/* Details and Problem Description */}
+              <div className="bg-slate-50 p-4 rounded-xl border space-y-1.5 border-slate-200">
+                <h6 className="font-black text-xs text-slate-950">ملخص وتفاصيل العمل المنجز:</h6>
+                <p className="text-xxs text-slate-700 leading-relaxed max-w-full">
+                  تأسست هذه الفاتورة تزامناً مع اللقاء وحل الأعطال البرمجية المسجلة وتغطية طلب الدعم الفني: <strong className="text-slate-900 font-bold">"{invoiceMeeting.problemDescription}"</strong>. شمل ذلك التشخيص الأولي بالذكاء الاصطناعي وكتابة وتعديل ملاحظات الحل البرمجية والتأشير بإنهاء اللقاء بنجاح.
+                </p>
+              </div>
+
+              {/* Invoice Breakdown Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xxs text-right">
+                  <thead>
+                    <tr className="bg-slate-950 text-white font-extrabold rounded-lg">
+                      <th className="p-3.5 rounded-r-lg">الخدمة واللقاء الاستشاري المنجز</th>
+                      <th className="p-3.5 hidden sm:table-cell">الحزمة والمدة</th>
+                      <th className="p-3.5 text-center">حالة الدعم الفني</th>
+                      <th className="p-3.5 rounded-l-lg text-left">التكلفة الإجمالية</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="p-3.5 font-extrabold text-slate-900 max-w-xs leading-normal">
+                        {invoiceMeeting.serviceTitle}
+                        <p className="text-[10px] text-slate-400 font-normal mt-1 sm:hidden">جلسة عمل كاملة + دعم فني فوري (45 دقيقة)</p>
+                      </td>
+                      <td className="p-3.5 text-slate-500 font-medium hidden sm:table-cell">جلسة عمل كاملة + دعم فني فوري (45 دقيقة)</td>
+                      <td className="p-3.5 text-center">
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                          تم إنهاء العمل بنجاح ✅
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-left font-mono font-black text-slate-950 text-xs">${invoiceMeeting.finalPrice || 150}.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals Section */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end pt-5 border-t gap-5 border-slate-200">
+                <div className="text-slate-450 leading-relaxed text-[10px] max-w-md">
+                  <p className="font-bold text-slate-700">شروط وإقرار الفاتورة المعتمدة:</p>
+                  <p>تم سداد هذه الفاتورة بالكامل وتعتبر وثيقة ترخيص تقديم الدعم الفوري والبرمجة وحل المشكلات الفنية. لا تترتب على العميل أي مبالغ إضافية بموجب هذا الدعم.</p>
+                </div>
+
+                <div className="w-full sm:w-64 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xxs shrink-0">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">المبلغ الصافي للخدمة:</span>
+                    <span className="font-mono font-bold text-slate-800">${invoiceMeeting.finalPrice || 150}.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">ضريبة القيمة المضافة (0%):</span>
+                    <span className="font-mono font-bold text-slate-800">$0.00</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 font-black text-xs border-slate-200">
+                    <span className="text-slate-950">المجموع النهائي (USD):</span>
+                    <span className="font-mono text-emerald-700 text-sm font-black">${invoiceMeeting.finalPrice || 150}.00</span>
+                  </div>
+                  <div className="text-left text-[10px] text-slate-400 font-bold mt-1">
+                    ما يعادل تقريباً: {Math.round((invoiceMeeting.finalPrice || 150) * 3.75)} ر.س (ريال سعودي)
+                  </div>
+                </div>
+              </div>
+
+              {/* Digital stamp visual */}
+              <div className="flex justify-between items-center bg-emerald-50/50 p-4 border border-emerald-500/10 rounded-2xl pt-5">
+                <div className="text-xxs text-slate-500">
+                  <p className="font-bold text-slate-800">✍️ توقيع ومصادقة المطور حسام محمد</p>
+                  <p className="mt-1">قسم المبيعات الاستشارية والحسابات | مستقل تك 2026</p>
+                </div>
+                
+                <div className="h-16 w-16 border-2 border-dashed border-emerald-600 rounded-full flex flex-col items-center justify-center text-[8px] font-black text-emerald-700 relative -rotate-12 select-none shrink-0 bg-white shadow-xs">
+                  <span className="text-[10px] tracking-wider font-extrabold uppercase">PAID</span>
+                  <span>مستقل تك</span>
+                  <div className="absolute text-[5px] tracking-tighter text-emerald-500 bottom-1 font-bold">APPROVED</div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer Controls (No print) */}
+            <div className="flex items-center justify-end bg-slate-100 border-t border-slate-200 px-6 py-4 gap-2.5 no-print select-none">
+              <button
+                type="button"
+                onClick={() => setInvoiceMeeting(null)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs px-5 py-2 rounded-xl transition cursor-pointer"
+              >
+                إغلاق
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <Printer className="h-4 w-4" />
+                <span>طباعة وتحميل PDF 🖨️</span>
+              </button>
+            </div>
 
           </div>
         </div>
