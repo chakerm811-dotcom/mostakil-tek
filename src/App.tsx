@@ -148,6 +148,23 @@ export default function App() {
   });
   const [isCreatingService, setIsCreatingService] = useState(false);
 
+  // Developer Secure Login Modal state
+  const [showDeveloperLoginModal, setShowDeveloperLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const handleDeveloperLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginEmail.trim().toLowerCase() === "chakerm811@gmail.com" && loginPassword === "chakerm811") {
+      setAdminMode(true);
+      setShowDeveloperLoginModal(false);
+      setLoginError("");
+    } else {
+      setLoginError("معذرةً، البريد الإلكتروني أو كلمة المرور غير مطابقة. تم حظر الدخول!");
+    }
+  };
+
   // Init Data fetch
   useEffect(() => {
     fetchBackendStatus();
@@ -456,8 +473,15 @@ export default function App() {
             <button
               id="admin_mode_toggle"
               onClick={() => {
-                setAdminMode(!adminMode);
-                setSelectedMeetingForNotes(null);
+                if (adminMode) {
+                  setAdminMode(false);
+                  setSelectedMeetingForNotes(null);
+                } else {
+                  setLoginEmail("");
+                  setLoginPassword("");
+                  setLoginError("");
+                  setShowDeveloperLoginModal(true);
+                }
               }}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 adminMode 
@@ -1521,6 +1545,98 @@ export default function App() {
               >
                 {isCreatingService ? "جاري الحفظ سحابياً..." : "نشر الخدمة في الكتالوج الآن ✔"}
               </button>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* DEVELOPER SECURE LOGIN MODAL */}
+      {showDeveloperLoginModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 text-right">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 bg-amber-500 text-white rounded-lg flex items-center justify-center">
+                  <Sliders className="h-4.5 w-4.5" />
+                </div>
+                <h4 className="font-extrabold text-slate-950 text-base">بوابة دخول المطور المعتمد</h4>
+              </div>
+              <button 
+                onClick={() => setShowDeveloperLoginModal(false)}
+                className="text-slate-400 hover:text-slate-900 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              هذا القسم مغلق ومحمي بكلمة مرور مخصصة لمطور المنصة وصاحبها فقط. يرجى إدخال بريدك وبيانات الحماية للمتابعة إلى الإدارة.
+            </p>
+
+            <form onSubmit={handleDeveloperLogin} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">البريد الإلكتروني للمطور</label>
+                <input 
+                  type="email"
+                  required
+                  placeholder="chakerm811@gmail.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full p-2.5 border rounded-xl text-left font-mono focus:ring-2 focus:ring-amber-500 outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">كلمة السر الخاصة بك</label>
+                <input 
+                  type="password"
+                  required
+                  placeholder="•••••••••••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full p-2.5 border rounded-xl text-left font-mono focus:ring-2 focus:ring-amber-500 outline-hidden"
+                />
+              </div>
+
+              {loginError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xxs font-bold rounded-xl flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              {/* Secure Developer Hint / Tooltip for testing reference */}
+              <div className="p-3 bg-amber-50/60 border border-amber-100 text-amber-900 rounded-xl space-y-1">
+                <span className="font-bold flex items-center gap-1.5 text-xxs text-amber-800">
+                  <Info className="h-3.5 w-3.5" />
+                  بيانات تجربة الدخول السريع:
+                </span>
+                <p className="text-[10px] text-amber-900 font-medium">
+                  البريد: <span className="font-mono bg-white px-1 py-0.5 rounded font-bold border border-amber-200 font-sans">chakerm811@gmail.com</span>
+                </p>
+                <p className="text-[10px] text-amber-900 font-medium">
+                  كلمة المرور: <span className="font-mono bg-white px-1 py-0.5 rounded font-bold border border-amber-200 font-sans">chakerm811</span>
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1 font-sans">
+                <button
+                  type="submit"
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Check className="h-4 w-4" />
+                  <span>تأكيد الهوية والدخول 🔓</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeveloperLoginModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl transition"
+                >
+                  إلغاء
+                </button>
+              </div>
             </form>
 
           </div>
