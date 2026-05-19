@@ -148,6 +148,72 @@ export default function App() {
   });
   const [isCreatingService, setIsCreatingService] = useState(false);
 
+  // Developer Profile dynamic editing states
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    title: "",
+    bio: "",
+    avatar: "",
+    telegram: "",
+    email: "",
+    skills: ""
+  });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
+  useEffect(() => {
+    if (developer) {
+      setProfileForm({
+        name: developer.name || "",
+        title: developer.title || "",
+        bio: developer.bio || "",
+        avatar: developer.avatar || "",
+        telegram: developer.telegram || "",
+        email: developer.email || "",
+        skills: Array.isArray(developer.skills) ? developer.skills.join(", ") : developer.skills || ""
+      });
+    }
+  }, [developer]);
+
+  const handleUpdateProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdatingProfile(true);
+    try {
+      const skillsArray = profileForm.skills
+        .split(",")
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      const payload = {
+        name: profileForm.name,
+        title: profileForm.title,
+        bio: profileForm.bio,
+        avatar: profileForm.avatar,
+        telegram: profileForm.telegram,
+        email: profileForm.email,
+        skills: skillsArray
+      };
+
+      const res = await fetch("/api/developer-profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDeveloper(data);
+        alert("تم حفظ وتحديث بيانات المطور والصفحة الرئيسية بنجاح! 🎉");
+      } else {
+        alert("فشل تحديث ملف المطور.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("عطل بالاتصال أثناء تحديث بيانات المطور.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   // Developer Secure Login Modal state
   const [showDeveloperLoginModal, setShowDeveloperLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -158,6 +224,7 @@ export default function App() {
     e.preventDefault();
     if (loginEmail.trim().toLowerCase() === "chakerm811@gmail.com" && loginPassword === "chakerm811") {
       setAdminMode(true);
+      setActiveTab("admin_dashboard"); // Automatically redirect to dashboard
       setShowDeveloperLoginModal(false);
       setLoginError("");
     } else {
@@ -509,8 +576,8 @@ export default function App() {
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-right">
             <div className="relative">
               <img 
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" 
-                alt="حسام محمد" 
+                src={developer.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"} 
+                alt={developer.name} 
                 className="w-24 h-24 rounded-2xl border-4 border-emerald-500 object-cover shadow-lg"
               />
               <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-slate-900 animate-pulse"></span>
@@ -619,6 +686,21 @@ export default function App() {
                 <Terminal className="h-4 w-4 text-emerald-500 font-bold" />
                 <span>طبيب الأكواد والذكاء الاصطناعي 🧬</span>
               </button>
+
+              {adminMode && (
+                <button
+                  id="tab_admin_dashboard_btn"
+                  onClick={() => setActiveTab("admin_dashboard")}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all border border-amber-300 ${
+                    activeTab === "admin_dashboard"
+                      ? "bg-amber-600 text-white shadow-md shadow-amber-200"
+                      : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  }`}
+                >
+                  <Sliders className="h-4 w-4" />
+                  <span>داشبورد المطور 👨‍💻⚙️</span>
+                </button>
+              )}
             </div>
 
             {/* Quick action button to add customized service (useful simulation) */}
@@ -1447,6 +1529,365 @@ export default function App() {
               )}
 
             </div>
+          </div>
+        )}
+
+        {/* TAB 5: COMPREHENSIVE DEVELOPER DASHBOARD CONTROL CENTER */}
+        {activeTab === "admin_dashboard" && (
+          <div id="admin_dashboard_view" className="space-y-6">
+            
+            {/* Dashboard Header */}
+            <div className="bg-slate-900 text-white rounded-3xl p-6 relative overflow-hidden shadow-xl border border-slate-800">
+              <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl"></div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 text-[10px] font-extrabold rounded-md">لوحة التحكم الكاملة</span>
+                    <h3 className="text-xl font-black text-white">لوحة تحكم وإدارة ميزات المطور حسام</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">تستطيع من هنا التحكم في تفاصيل صفحتك التعريفية وبيانات الاتصال مباشرة، بالإضافة لتحديث وحوكمة طلبات عملائك وتوجيههم.</p>
+                </div>
+                {/* Database Type Indicator in dashboard */}
+                <div className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-800 rounded-xl text-xs font-semibold text-slate-300 border border-slate-700">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>حالة التخزين:</span>
+                  <span className="text-emerald-400 font-extrabold">{dbStatus?.databaseType || "خادم MongoDB متصل"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Metrics Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">إجمالي الطلبات والحجوزات</p>
+                  <p className="text-2xl font-black text-slate-900 mt-1">{meetings.length}</p>
+                </div>
+                <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold">
+                  <Calendar className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">مواعيد قيد الانتظار ⏳</p>
+                  <p className="text-2xl font-black text-amber-600 mt-1">
+                    {meetings.filter(m => m.status === "pending" || !m.status).length}
+                  </p>
+                </div>
+                <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center font-bold">
+                  <Clock className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">اجتماعات مؤكدة 📅</p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">
+                    {meetings.filter(m => m.status === "scheduled").length}
+                  </p>
+                </div>
+                <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold">
+                  <CheckCircle2 className="h-5 w-5 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold text-slate-400 uppercase">الخدمات في المعرض</p>
+                  <p className="text-2xl font-black text-indigo-600 mt-1">{services.length}</p>
+                </div>
+                <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
+                  <Layers className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Dynamic Dashboard Sections GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+              {/* RIGHT / MAIN SIDE: EDIT HOMEPAGE FORM (5 cols) */}
+              <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
+                <div className="border-b border-slate-100 pb-3 text-right">
+                  <h4 className="font-extrabold text-slate-950 text-sm flex items-center justify-start gap-2">
+                    <Sliders className="h-4.5 w-4.5 text-amber-500" />
+                    <span>تعديل بيانات الصفحة الرئيسية والملف الشخصي</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">قم بتحديث أي تفصيل هنا، وسيتم الحفظ المباشر بقاعدة البيانات ومزامنته بجميع أقسام العرض للزوار.</p>
+                </div>
+
+                <form onSubmit={handleUpdateProfileSubmit} className="space-y-4 text-xs font-medium text-right">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">الاسم الكامل للمطور</label>
+                    <input 
+                      type="text"
+                      required
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                      className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 font-bold"
+                      placeholder="امسح واكتب مثلا: م. حسام محمد"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">اللقب المهني وسطر الوصف المثير</label>
+                    <input 
+                      type="text"
+                      required
+                      value={profileForm.title}
+                      onChange={(e) => setProfileForm({ ...profileForm, title: e.target.value })}
+                      className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50"
+                      placeholder="مثال: مطور برمجيات متكامل ومستشار حلول سحابية"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">النبذة والبيوجرافي لشرح مميزاتك وعملك</label>
+                    <textarea 
+                      required
+                      rows={4}
+                      value={profileForm.bio}
+                      onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                      className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 leading-relaxed"
+                      placeholder="اكتب نبذة مقنعة وجذابة للزوار لحجز استشارات معك..."
+                    ></textarea>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">البريد الإلكتروني المهني</label>
+                      <input 
+                        type="email"
+                        required
+                        value={profileForm.email}
+                        onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                        className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 text-left font-mono"
+                        placeholder="hossam@example.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">يوزر حساب التلغرام الخاص بك</label>
+                      <input 
+                        type="text"
+                        required
+                        value={profileForm.telegram}
+                        onChange={(e) => setProfileForm({ ...profileForm, telegram: e.target.value })}
+                        className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 text-left font-mono"
+                        placeholder="@dev_username"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">رابط الصورة الشخصية (أنسبلاش أو خارجي)</label>
+                    <input 
+                      type="url"
+                      required
+                      value={profileForm.avatar}
+                      onChange={(e) => setProfileForm({ ...profileForm, avatar: e.target.value })}
+                      className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50 text-left font-mono"
+                      placeholder="https://images.unsplash.com/photo-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">المهارات والتقنيات (افصل بينها بفاصلة ,)</label>
+                    <input 
+                      type="text"
+                      required
+                      value={profileForm.skills}
+                      onChange={(e) => setProfileForm({ ...profileForm, skills: e.target.value })}
+                      className="w-full p-2.5 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500/50"
+                      placeholder="React, Express, MongoDB, Debugging, Docker"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">اكتب المهارات مفصولة بعلامة الفاصلة الإنجليزية (,) للمطابقة.</p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProfile}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    {isUpdatingProfile ? (
+                      <>
+                        <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                        <span>جاري الحفظ والمزامنة بقاعدة البيانات...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4.5 w-4.5" />
+                        <span>حفظ ومزامنة وتحديث الصفحة الرئيسية ✨</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* LEFT SIDE: HEALTH COMPREHENSIVE REQUESTS AND APPOINTMENTS (7 cols) */}
+              <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4 flex flex-col">
+                <div className="border-b border-slate-100 pb-3 text-right">
+                  <h4 className="font-extrabold text-slate-950 text-sm flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-right">
+                      <Clock className="h-4.5 w-4.5 text-emerald-500" />
+                      <span>إدارة طلبات الاجتماع وحجوزات العملاء المباشرة</span>
+                    </span>
+                    <span className="bg-emerald-50 text-emerald-800 text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                      {meetings.length} حجز
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">انقر على أي طلب من القائمة أدناه لعرض تحليلات الذكاء الاصطناعي الأوتوماتيكية، وتدوين توجيهات المبرمج، وتغيير حالته.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
+                  
+                  {/* Internal Sub-List of Bookings (5 cols) */}
+                  <div className="md:col-span-5 space-y-2 max-h-[580px] overflow-y-auto pr-1">
+                    {meetings.length === 0 ? (
+                      <div className="text-center p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                        <Calendar className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs text-slate-500 font-bold">لم يسجل أي عميل موعداً بعد.</p>
+                      </div>
+                    ) : (
+                      meetings.map((m) => {
+                        const isChosenInDashboard = selectedMeetingForNotes?.id === m.id;
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => handleOpenMeetingEditor(m)}
+                            className={`p-3 rounded-xl border cursor-pointer transition-all text-right ${
+                              isChosenInDashboard
+                                ? "bg-amber-50/80 border-amber-400 shadow-xs animate-pulse"
+                                : "bg-slate-50 hover:bg-slate-100 border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] text-slate-400 font-bold">{m.meetingDate}</span>
+                              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
+                                m.status === "scheduled" ? "bg-emerald-100 text-emerald-800" :
+                                m.status === "completed" ? "bg-blue-100 text-blue-800" :
+                                m.status === "canceled" ? "bg-red-100 text-red-800" :
+                                "bg-amber-100 text-amber-800"
+                              }`}>
+                                {m.status === "scheduled" ? "مؤكد" :
+                                 m.status === "completed" ? "مكتمل" :
+                                 m.status === "canceled" ? "ملغى" :
+                                 "انتظار"}
+                              </span>
+                            </div>
+                            <h5 className="font-extrabold text-slate-900 text-[11px] truncate mt-1">{m.serviceTitle}</h5>
+                            <p className="text-[10px] text-slate-500 font-semibold mt-1">العميل: {m.clientName}</p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Internal Editor / Viewer detail cards (7 cols) */}
+                  <div className="md:col-span-7 space-y-4">
+                    {selectedMeetingForNotes ? (
+                      <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2 text-right">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-bold">بوابة التحكم بالموعد</span>
+                            <span className="text-xxs font-black text-slate-600 block">معرّف الموعد: {selectedMeetingForNotes.id}</span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteMeeting(selectedMeetingForNotes.id)}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 p-1.5 rounded-lg text-xxs font-bold transition flex items-center gap-1 cursor-pointer"
+                            title="حذف الاجتماع نهائياً"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
+
+                        {/* Client details info */}
+                        <div className="bg-slate-50 p-3 rounded-xl space-y-1.5 text-xxs text-slate-700 text-right">
+                          <p><strong className="text-slate-900 font-bold">العميل الرئيسي:</strong> {selectedMeetingForNotes.clientName}</p>
+                          <p><strong className="text-slate-900 font-bold">البريد الإلكتروني:</strong> <span className="text-left font-mono inline-block">{selectedMeetingForNotes.clientEmail}</span></p>
+                          <p><strong className="text-slate-900 font-bold">الهاتف:</strong> {selectedMeetingForNotes.clientPhone}</p>
+                          <p><strong className="text-slate-900 font-bold">التوقيت المختار:</strong> {selectedMeetingForNotes.meetingDate} ✦ {selectedMeetingForNotes.meetingTime}</p>
+                          <div className="p-2 bg-white rounded-lg border border-slate-200 mt-2 max-h-24 overflow-y-auto">
+                            <strong className="text-slate-900 block mb-1">شرح مشكلة العميل:</strong>
+                            <p className="text-slate-600 leading-relaxed text-[11px] font-medium">{selectedMeetingForNotes.problemDescription}</p>
+                          </div>
+                        </div>
+
+                        {/* AI Consultation diagnosis result */}
+                        {selectedMeetingForNotes.aiConsultation && (
+                          <div className="p-3 bg-emerald-50/65 border border-emerald-100 rounded-xl space-y-1.5 text-xxs text-right">
+                            <span className="font-extrabold text-emerald-800 flex items-center justify-start gap-1">
+                              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>تحليل الذكاء الاصطناعي الأولي (Gemini Analysis):</span>
+                            </span>
+                            <p className="text-slate-750 leading-relaxed font-semibold italic">"{selectedMeetingForNotes.aiConsultation.techAnalysis}"</p>
+                            <p className="text-[10px] text-slate-500"><strong>منهجية اللقاء:</strong> {selectedMeetingForNotes.aiConsultation.proposedAgenda}</p>
+                            <p className="text-[10px] text-slate-500"><strong>المستلزمات قبل الاجتماع:</strong> {selectedMeetingForNotes.aiConsultation.requiredPreparation}</p>
+                            <p className="text-[10px] text-slate-500"><strong>التكلفة التقديرية المقترحة:</strong> {selectedMeetingForNotes.aiConsultation.estimatedCost}</p>
+                          </div>
+                        )}
+
+                        {/* Editor inputs */}
+                        <div className="space-y-3 pt-2 border-t text-xxs block text-right">
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">حالة الطلب</label>
+                            <select
+                              value={tempStatus}
+                              onChange={(e) => setTempStatus(e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                            >
+                              <option value="pending">انتظار القبول والمراجعة ⏳</option>
+                              <option value="scheduled">تأكيد الجدولة وتقديم الدعم مسبقاً 📅</option>
+                              <option value="completed">تم عقد اللقاء وحل العطل ✅</option>
+                              <option value="canceled">إلغاء الموعد المقترح ❌</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block font-bold text-slate-700 mb-1">رد وتوجيهات المبرمج (تظهر للعميل في قائمة مواعيده)</label>
+                            <textarea
+                              rows={3}
+                              placeholder="أكتب توجيهاتك ونصائح للعميل، مثل: أهلاً بك، تم قبول حجزك ويرجى تنزيل البرنامج..."
+                              value={tempNotes}
+                              onChange={(e) => setTempNotes(e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-right"
+                            ></textarea>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleUpdateMeetingStatus}
+                            disabled={isUpdatingMeeting}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            {isUpdatingMeeting ? (
+                              <>
+                                <span className="animate-spin h-3 border-2 border-white border-t-transparent rounded-full"></span>
+                                <span>جاري الحفظ للتعديلات...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-4 w-4" />
+                                <span>تحديث حالة و ملاحظات الموعد بنجاح ✅</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-16 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-4">
+                        <Info className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                        <p className="text-xs font-bold">يرجى اختيار أحد طلبات العملاء من القائمة الجانبية لتفعيل محرر تفاصيل وحالة الدعم لديه.</p>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
         )}
 

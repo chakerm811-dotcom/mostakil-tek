@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -41,7 +41,7 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_FILE = path.join(DATA_DIR, "db.json");
 
 // DB initial preloaded structures for personalized services & booking meetings
-const developerProfile = {
+const defaultDeveloperProfile = {
   name: "م. حسام محمد",
   title: "مطور برمجيات متكامل (Full-Stack Developer) ومستشار حلول سحابية",
   avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
@@ -144,12 +144,14 @@ class LocalJSONDatabase {
   public data: {
     services: any[];
     meetings: any[];
+    developerProfile: any;
   };
 
   constructor() {
     this.data = {
       services: [...defaultServices],
-      meetings: [...defaultMeetings]
+      meetings: [...defaultMeetings],
+      developerProfile: { ...defaultDeveloperProfile }
     };
     this.load();
   }
@@ -161,7 +163,8 @@ class LocalJSONDatabase {
         const parsed = JSON.parse(fileContent);
         this.data = {
           services: parsed.services || [...defaultServices],
-          meetings: parsed.meetings || [...defaultMeetings]
+          meetings: parsed.meetings || [...defaultMeetings],
+          developerProfile: parsed.developerProfile || { ...defaultDeveloperProfile }
         };
         console.log("Local JSON Database loaded successfully.");
       } else {
@@ -263,28 +266,98 @@ if (MONGODB_URI) {
   console.log("No MONGODB_URI found in env. Utilizing persistent local JSON file adapter.");
 }
 
+// Helper to transform any query containing "id" to check both custom "id" string and Mongo native "_id" or its ObjectId
+const normalizeQuery = (query: any) => {
+  if (query && typeof query === "object") {
+    const { id, ...rest } = query;
+    if (id !== undefined && id !== null) {
+      const orConditions: any[] = [{ id: id }];
+      if (typeof id === "string") {
+        orConditions.push({ _id: id });
+        try {
+          if (ObjectId.isValid(id)) {
+            orConditions.push({ _id: new ObjectId(id) });
+          }
+        } catch (e) {
+          // Ignore invalid ObjectId cast errors
+        }
+      }
+      return { ...rest, $or: orConditions };
+    }
+  }
+  return query;
+};
+
 // Global abstraction for DB Collection operations
 const dbAdapter = {
+  async getProfile() {
+    if (useRealMongo && mongoClient) {
+      const coll = mongoClient.db().collection("profile");
+      const doc = await coll.findOne({ id: "main_profile" });
+      if (doc) {
+        return {
+          ...doc,
+          id: doc.id || doc._id?.toString()
+        };
+      } else {
+        await coll.insertOne({ id: "main_profile", ...defaultDeveloperProfile });
+        return { id: "main_profile", ...defaultDeveloperProfile };
+      }
+    } else {
+      return localDB.data.developerProfile || { ...defaultDeveloperProfile };
+    }
+  },
+  async updateProfile(profileData: any) {
+    if (useRealMongo && mongoClient) {
+      const coll = mongoClient.db().collection("profile");
+      // Remove mongo _id if any to avoid immutable field error during update
+      const { _id, id, ...rest } = profileData;
+      await coll.updateOne({ id: "main_profile" }, { $set: rest }, { upsert: true });
+      return { id: "main_profile", ...rest };
+    } else {
+      localDB.data.developerProfile = { ...localDB.data.developerProfile, ...profileData };
+      localDB.save();
+      return localDB.data.developerProfile;
+    }
+  },
   async collection(name: "services" | "meetings") {
     if (useRealMongo && mongoClient) {
       const coll = mongoClient.db().collection(name);
       return {
         find: async (query = {}) => {
-          return await coll.find(query).toArray();
+          const docs = await coll.find(normalizeQuery(query)).toArray();
+          return docs.map((doc: any) => ({
+            ...doc,
+            id: doc.id || doc._id?.toString()
+          }));
         },
         findOne: async (query: any) => {
-          return await coll.findOne(query);
+          const doc = await coll.findOne(normalizeQuery(query));
+          if (doc) {
+            return {
+              ...doc,
+              id: doc.id || doc._id?.toString()
+            };
+          }
+          return null;
         },
         insertOne: async (doc: any) => {
-          const res = await coll.insertOne({ ...doc });
-          return { id: res.insertedId.toString(), ...doc };
+          if (!doc.id) {
+            const prefix = name === "meetings" ? "m_" : "s_";
+            doc.id = prefix + Math.random().toString(36).substring(2, 11);
+          }
+          await coll.insertOne({ ...doc });
+          return {
+            ...doc,
+            id: doc.id || doc._id?.toString()
+          };
         },
         updateOne: async (query: any, update: any) => {
-          const res = await coll.updateOne(query, update);
+          const res = await coll.updateOne(normalizeQuery(query), update);
           return res.modifiedCount > 0;
         },
         deleteOne: async (query: any) => {
-          const res = await coll.deleteOne(query);
+          const res = await coll.deleteOne(normalizeQuery(query));
           return res.deletedCount > 0;
         }
       };
@@ -300,9 +373,42 @@ const dbAdapter = {
   }
 };
 
+// 2. Fetch Backend Database Status
+app.get("/api/status", (req, res) => {
+  res.json({
+    databaseType: useRealMongo ? "خادم MongoDB سحابي متصل ✓" : "قاعدة بيانات JSON محلية ✓"
+  });
+});
+
 // 3. Fetch Developer Profile
-app.get("/api/developer-profile", (req, res) => {
-  res.json(developerProfile);
+app.get("/api/developer-profile", async (req, res) => {
+  try {
+    const profile = await dbAdapter.getProfile();
+    res.json(profile);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.2 Update Developer Profile
+app.put("/api/developer-profile", async (req, res) => {
+  try {
+    const updated = await dbAdapter.updateProfile(req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.5. Fetch all services
+app.get("/api/services", async (req, res) => {
+  try {
+    const coll = await dbAdapter.collection("services");
+    const servicesList = await coll.find();
+    res.json(servicesList);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 4. Create service dynamically
