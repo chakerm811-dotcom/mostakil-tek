@@ -145,13 +145,15 @@ class LocalJSONDatabase {
     services: any[];
     meetings: any[];
     developerProfile: any;
+    mongodbUri?: string;
   };
 
   constructor() {
     this.data = {
       services: [...defaultServices],
       meetings: [...defaultMeetings],
-      developerProfile: { ...defaultDeveloperProfile }
+      developerProfile: { ...defaultDeveloperProfile },
+      mongodbUri: ""
     };
     this.load();
   }
@@ -164,7 +166,8 @@ class LocalJSONDatabase {
         this.data = {
           services: parsed.services || [...defaultServices],
           meetings: parsed.meetings || [...defaultMeetings],
-          developerProfile: parsed.developerProfile || { ...defaultDeveloperProfile }
+          developerProfile: parsed.developerProfile || { ...defaultDeveloperProfile },
+          mongodbUri: parsed.mongodbUri || ""
         };
         console.log("Local JSON Database loaded successfully.");
       } else {
@@ -233,37 +236,74 @@ class LocalJSONDatabase {
 
 const localDB = new LocalJSONDatabase();
 
-// MongoDB real driver connection
+// MongoDB real driver connection and dynamic configuration
 const MONGODB_URI = process.env.MONGODB_URI;
 let mongoClient: MongoClient | null = null;
 let useRealMongo = false;
+let mongoError: string | null = null;
+let mongoDbName: string | null = null;
 
-if (MONGODB_URI) {
-  try {
-    mongoClient = new MongoClient(MONGODB_URI);
-    mongoClient.connect().then(async (client) => {
-      console.log("Successfully connected to real MongoDB instance!");
-      useRealMongo = true;
-      const dbInstance = client.db();
-      
-      const seedCollection = async (collName: string, items: any[]) => {
-        const count = await dbInstance.collection(collName).countDocuments();
-        if (count === 0) {
-          await dbInstance.collection(collName).insertMany(items);
-          console.log(`Seeded MongoDB collection "${collName}" with default items.`);
-        }
-      };
-
-      await seedCollection("services", defaultServices);
-      await seedCollection("meetings", defaultMeetings);
-    }).catch(err => {
-      console.error("Could not connect to MongoDB URI. Falling back gracefully to persistent JSON file Database: ", err.message);
-    });
-  } catch (err) {
-    console.error("Error creating Mongo client target. Fallback on file database:", err);
+async function connectToMongo(uri: string): Promise<boolean> {
+  const trimmed = (uri || "").trim();
+  if (!trimmed) {
+    useRealMongo = false;
+    mongoClient = null;
+    mongoDbName = null;
+    mongoError = "No connection URI configured.";
+    return false;
   }
+  
+  try {
+    const newClient = new MongoClient(trimmed);
+    await newClient.connect();
+    
+    // Close existing connection if any
+    if (mongoClient) {
+      try {
+        await mongoClient.close();
+      } catch (e) {
+        // Safe ignore
+      }
+    }
+    
+    mongoClient = newClient;
+    useRealMongo = true;
+    mongoError = null;
+    const dbInstance = newClient.db();
+    mongoDbName = dbInstance.databaseName;
+    console.log(`Successfully connected to MongoDB database: "${mongoDbName}"`);
+    
+    const seedCollection = async (collName: string, items: any[]) => {
+      const count = await dbInstance.collection(collName).countDocuments();
+      if (count === 0) {
+        await dbInstance.collection(collName).insertMany(items);
+        console.log(`Seeded dynamic MongoDB collection "${collName}" with default items.`);
+      }
+    };
+
+    await seedCollection("services", defaultServices);
+    await seedCollection("meetings", defaultMeetings);
+    
+    return true;
+  } catch (err: any) {
+    mongoError = err.message || "Failed to connect to MongoDB dynamic URI";
+    useRealMongo = false;
+    mongoClient = null;
+    mongoDbName = null;
+    console.error("Dynamic MongoDB connection error:", err.message);
+    return false;
+  }
+}
+
+// Auto-run connection on startup using saved DB URI or default process env variable
+const initialMongoUri = localDB.data.mongodbUri || MONGODB_URI;
+if (initialMongoUri) {
+  connectToMongo(initialMongoUri).catch(err => {
+    console.error("Initial auto-connection failed. Using local storage fallback. Error:", err.message);
+  });
 } else {
-  console.log("No MONGODB_URI found in env. Utilizing persistent local JSON file adapter.");
+  mongoError = "No MONGODB_URI found";
+  console.log("No initial MongoDB connection URI found. Utilizing persistent local JSON file adapter.");
 }
 
 // Helper to transform any query containing "id" to check both custom "id" string and Mongo native "_id" or its ObjectId
@@ -375,9 +415,66 @@ const dbAdapter = {
 
 // 2. Fetch Backend Database Status
 app.get("/api/status", (req, res) => {
+  const currentUri = localDB.data.mongodbUri || MONGODB_URI;
   res.json({
-    databaseType: useRealMongo ? "خادم MongoDB سحابي متصل ✓" : "قاعدة بيانات JSON محلية ✓"
+    databaseType: useRealMongo ? "خادم MongoDB سحابي متصل ✓" : "قاعدة بيانات JSON محلية ✓",
+    useRealMongo,
+    mongoError,
+    dbName: mongoDbName || "local_json",
+    isUriConfigured: !!currentUri,
+    maskedUri: currentUri ? currentUri.replace(/:([^@]+)@/, ":******@") : null,
+    configMongoUri: localDB.data.mongodbUri || MONGODB_URI || ""
   });
+});
+
+// 2.2 Update Dynamic MongoDB URI
+app.put("/api/config/mongodb-uri", async (req, res) => {
+  const { uri } = req.body;
+  try {
+    const trimmedUri = (uri || "").trim();
+    localDB.data.mongodbUri = trimmedUri;
+    localDB.save();
+    
+    if (trimmedUri) {
+      const isConnected = await connectToMongo(trimmedUri);
+      if (isConnected) {
+        return res.json({ 
+          success: true, 
+          message: "تم الاتصال بنجاح بقاعدة بيانات MongoDB وتحميل الهياكل! 🎉",
+          dbName: mongoDbName,
+          databaseType: "خادم MongoDB سحابي متصل ✓",
+          useRealMongo: true,
+          mongoError: null
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          error: mongoError || "فشل الاتصال بقاعدة البيانات. يرجى التحقق من الرابط وتصاريح الاتصال (IP Access list في Atlas)." 
+        });
+      }
+    } else {
+      // Disconnect and use local fallback
+      useRealMongo = false;
+      if (mongoClient) {
+        try {
+          await mongoClient.close();
+        } catch (e) {}
+      }
+      mongoClient = null;
+      mongoDbName = null;
+      mongoError = "تم مسح الرابط؛ العودة لحالة التخزين المحلي.";
+      return res.json({ 
+        success: true, 
+        message: "تم تصفير وإلغاء اتصال MongoDB بنجاح. تم تفعيل التخزين المحلي JSON! 💾",
+        dbName: "local_json",
+        databaseType: "قاعدة بيانات JSON محلية ✓",
+        useRealMongo: false,
+        mongoError: "تم تصفير الرابط ومسحه بواسطة المطور."
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 3. Fetch Developer Profile

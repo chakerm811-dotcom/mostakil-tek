@@ -136,6 +136,11 @@ export default function App() {
   const [troubleReport, setTroubleReport] = useState<DiagnoseReport | null>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
 
+  // Database Dynamic Setup States
+  const [dbUriInput, setDbUriInput] = useState("");
+  const [isUpdatingDbUri, setIsUpdatingDbUri] = useState(false);
+  const [dbUriMessage, setDbUriMessage] = useState<{ text: string; isError: boolean } | null>(null);
+
   // Service Creation Modal (For Developer Flow)
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [newServiceForm, setNewServiceForm] = useState({
@@ -245,8 +250,39 @@ export default function App() {
       const res = await fetch("/api/status");
       const data = await res.json();
       setDbStatus(data);
+      if (data && data.configMongoUri) {
+        setDbUriInput(data.configMongoUri);
+      }
     } catch (e) {
       console.error("Failed to load backend status:", e);
+    }
+  };
+
+  const handleSaveDbUri = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdatingDbUri(true);
+    setDbUriMessage(null);
+    try {
+      const res = await fetch("/api/config/mongodb-uri", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uri: dbUriInput })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDbUriMessage({ text: data.message || "تم الاتصال وتحديث الاتصال بنجاح! 🎉", isError: false });
+        // Retrieve updated status
+        fetchBackendStatus();
+        // Also reload meetings and services to match the new dynamic database records
+        fetchMeetings();
+        fetchServices();
+      } else {
+        setDbUriMessage({ text: data.error || "فشل الاتصال بقاعدة البيانات. تيقّن من المعطيات وتأكد من تفعيل الوصول (White-listing IP: 0.0.0.0/0).", isError: true });
+      }
+    } catch (err: any) {
+      setDbUriMessage({ text: err.message || "حدث خطأ بالشبكة أثناء عملية تحديث الاتصال.", isError: true });
+    } finally {
+      setIsUpdatingDbUri(false);
     }
   };
 
@@ -1549,11 +1585,130 @@ export default function App() {
                 </div>
                 {/* Database Type Indicator in dashboard */}
                 <div className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-800 rounded-xl text-xs font-semibold text-slate-300 border border-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${dbStatus?.useRealMongo ? 'bg-emerald-500' : 'bg-amber-400'} animate-pulse`}></span>
                   <span>حالة التخزين:</span>
                   <span className="text-emerald-400 font-extrabold">{dbStatus?.databaseType || "خادم MongoDB متصل"}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Dashboard Database Status Card if any diagnostics exist */}
+            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 text-right text-xs space-y-3">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-slate-900 text-sm">نظام قواعد البيانات النشط:</span>
+                  <span className={`font-black px-2.5 py-1 rounded-lg text-xs ${dbStatus?.useRealMongo ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
+                    {dbStatus?.useRealMongo ? 'خادم MongoDB حقيقي متصل' : 'ملف التخزين المحلي JSON (Persistent Fallback)'}
+                  </span>
+                </div>
+                {dbStatus?.dbName && (
+                  <div className="text-xs font-bold text-slate-600">
+                     أنت متصل بقاعدة بيانات باسم: <strong className="font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-xs">{dbStatus?.dbName}</strong>
+                  </div>
+                )}
+              </div>
+              
+              {!dbStatus?.isUriConfigured && (
+                <div className="p-3.5 bg-blue-50/60 border border-blue-200 text-blue-800 rounded-2xl leading-relaxed text-xs">
+                  ℹ️ <strong>ملاحظة للمطور:</strong> لم يتم العثور على متغير البيئة <code className="font-mono text-pink-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">MONGODB_URI</code> في خيارات التشغيل لربط قاعدة البيانات السحابية (MongoDB Altas). يتم تشغيل الموقع الآن تلقائياً بنمط التخزين المحلي الآمن في ملف <code className="font-mono text-slate-800 bg-white px-1 py-0.5 rounded border">data/db.json</code> والذي يحتفظ بجميع حجوزاتك وتعديلات مظهر الصفحة الرئيسية بنجاح تام حتى ولو توقف الخادم أو تمت إعادة تشغيله.
+                </div>
+              )}
+
+              {dbStatus?.isUriConfigured && !dbStatus?.useRealMongo && dbStatus?.mongoError && (
+                <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-2xl leading-relaxed">
+                  <p className="font-extrabold text-xs flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-650 animate-ping"></span>
+                    <span>⚠️ عطل فني في الاتصال بقاعدة بيانات MongoDB السحابية:</span>
+                  </p>
+                  <p className="font-semibold font-mono text-xxs mt-2 bg-white p-3 rounded-xl border text-left overflow-x-auto text-red-600 leading-normal">{dbStatus.mongoError}</p>
+                  <p className="text-[11px] text-slate-500 mt-2 leading-normal">
+                    <strong>الحل المقترح:</strong> تأكد من صحة رمز المرور وعنوان الخادم في المتغير المسمى <code className="font-mono text-slate-800">MONGODB_URI</code>، والخطوة الأهم هي <strong>تفعيل خيار السماح بالاتصال من كافة الأجهزة وعناوين الـ IP (0.0.0.0/0 IP Access List)</strong> داخل حسابك على منصة MongoDB Atlas لتتمكن حاوية التطوير من حفظ قراءاتك بنجاح.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* MongoDB Connection Configurator Card */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-5 text-right text-xs space-y-4 shadow-xs">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                <Database className="h-5 w-5 text-emerald-600 animate-pulse" />
+                <h4 className="font-black text-slate-900 text-sm">إعداد وتغيير رابط قاعدة بيانات MongoDB المباشر</h4>
+              </div>
+              <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                اكتب أو الصق رابط الاتصال (Connection String) الخاص بك المأخوذ من منصة <strong>MongoDB Atlas</strong> لحفظ جميع المواعيد والعملاء وتعديلات الواجهة مباشرة في سحابتك الشخصية. سيتم حفظ هذا الرابط محلياً وإعادة الاتصال تلقائياً حتى عند إعادة تشغيل الموقع.
+              </p>
+
+              <form onSubmit={handleSaveDbUri} className="space-y-3">
+                <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
+                  <input
+                    type="text"
+                    required
+                    dir="ltr"
+                    value={dbUriInput}
+                    onChange={(e) => setDbUriInput(e.target.value)}
+                    placeholder="mongodb+srv://username:password@cluster.mongodb.net/myDatabase"
+                    className="flex-1 p-3 border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/50 font-mono text-xs font-semibold placeholder:font-sans placeholder:text-right"
+                  />
+                  <div className="flex gap-2 min-w-[150px]">
+                    <button
+                      type="submit"
+                      disabled={isUpdatingDbUri}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-3 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-75"
+                    >
+                      {isUpdatingDbUri ? (
+                        <>
+                          <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                          <span>جاري الفحص...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4" />
+                          <span>حفظ واتصال 🔌</span>
+                        </>
+                      )}
+                    </button>
+                    {dbUriInput && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setDbUriInput("");
+                          setIsUpdatingDbUri(true);
+                          setDbUriMessage(null);
+                          try {
+                            const res = await fetch("/api/config/mongodb-uri", {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ uri: "" })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setDbUriMessage({ text: data.message || "تم حذف الرابط بنجاح والعودة للتخزين المحلي!", isError: false });
+                              fetchBackendStatus();
+                              fetchMeetings();
+                              fetchServices();
+                            }
+                          } catch (err: any) {
+                            setDbUriMessage({ text: err.message, isError: true });
+                          } finally {
+                            setIsUpdatingDbUri(false);
+                          }
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold px-3 py-3 rounded-xl transition flex items-center justify-center cursor-pointer text-xxs"
+                        title="مسح الرابط والعودة للتخزين المحلي"
+                      >
+                        قطع الاتصال ❌
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {dbUriMessage && (
+                  <div className={`p-3 rounded-xl border font-bold flex items-center gap-2 ${dbUriMessage.isError ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                    <span className="h-2 w-2 rounded-full bg-current animate-ping"></span>
+                    <span>{dbUriMessage.text}</span>
+                  </div>
+                )}
+              </form>
             </div>
 
             {/* Metrics Row */}
