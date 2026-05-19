@@ -1,0 +1,6 @@
+{
+  "name": "مستقل تك - حجز خدمات واستشارات المطور",
+  "description": "موقع برمجى متكامل يتيح للزوار والعملاء اختيار الخدمات التقنية، وحجز مواعيد اجتماعات تشخيصية للتحدث مع المطور وإيجاد حلول لمشاكلهم مدعوماً بتحليل ذكي فوري من Google Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
