@@ -2311,8 +2311,8 @@ export default function App() {
 
       {/* Dynamic Invoice Modal Block */}
       {invoiceMeeting && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print">
-          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 overflow-hidden shadow-2xl space-y-4 text-right flex flex-col no-print my-8">
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto invoice-modal-backdrop">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 overflow-hidden shadow-2xl space-y-4 text-right flex flex-col invoice-modal-card my-8">
             
             {/* Modal Header controls (No print) */}
             <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-6 py-4 no-print select-none">
@@ -2364,9 +2364,8 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xxs leading-relaxed text-slate-600 border-b pb-5">
                 <div className="space-y-1">
                   <h5 className="font-black text-slate-950 text-xs border-r-2 border-slate-950 pr-2 mb-2">جهة تقديم الخدمة والدعم:</h5>
-                  <p><strong className="text-slate-900">المطور:</strong> المهندس محمد حسام (مطور Full-stack مستقل)</p>
-                  <p><strong className="text-slate-900">البريد المهني:</strong> hussein.tech@moustaqil.com</p>
-                  <p><strong className="text-slate-900">مقر العمل المهني:</strong> الرياض، المملكة العربية السعودية، قسم الدعم السحابي</p>
+                  <p><strong className="text-slate-900">المطور:</strong> {developer?.name || "م. حسام محمد"} (مطور برمجيات متكامل)</p>
+                  <p><strong className="text-slate-900">البريد المهني:</strong> <span className="font-mono inline-block text-left">{developer?.email || "hossam.dev@example.com"}</span></p>
                 </div>
 
                 <div className="space-y-1">
